@@ -265,9 +265,21 @@ function stopFocusTicker() {
   }
 }
 
+function resetFlipClockState() {
+  $$('.flip-unit').forEach((unit) => {
+    if (unit.flipTimer) clearTimeout(unit.flipTimer);
+    unit.flipTimer = null;
+    unit.classList.remove('flipping');
+  });
+  const root = $('#focusFlipClock');
+  root.dataset.unitCount = '';
+  root.innerHTML = '';
+}
+
 function showFocusSetup(task) {
   if (!task || task.status !== 'open') return;
   stopFocusTicker();
+  resetFlipClockState();
   app.focusSession = {
     taskId: task.id,
     title: task.title,
@@ -328,6 +340,7 @@ function showFocusPage(page) {
 
 function hideFocusPage() {
   stopFocusTicker();
+  resetFlipClockState();
   app.focusSession = null;
   app.focusPage = 'setup';
   clearFocusStorage();
@@ -363,6 +376,7 @@ function startFocusCountdown() {
     mode,
     setup: false
   };
+  resetFlipClockState();
   app.focusPersistSecond = Math.ceil(totalMs / 1000);
   showFocusClock();
   saveFocusSession();
@@ -583,6 +597,7 @@ function restartFocusSetup() {
   const session = app.focusSession;
   if (!session) return;
   stopFocusTicker();
+  resetFlipClockState();
   const task = app.state.openTasks.find((item) => item.id === session.taskId);
   if (!task) {
     hideFocusPage();
