@@ -13,7 +13,11 @@ const app = {
   drag: null,
   tabPress: null,
   ignoreNextClick: false,
-  confirmHandler: null
+  confirmHandler: null,
+  focusSession: null,
+  focusTicker: null,
+  focusPersistSecond: null,
+  focusPage: 'setup'
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -169,6 +173,12 @@ function setState(state) {
 }
 
 function showAuth() {
+  stopFocusTicker();
+  app.focusSession = null;
+  $('#focusShell')?.classList.add('hidden');
+  $('#appShell')?.classList.add('hidden');
+  document.body.classList.remove('focus-mode');
+  document.title = '轻待办';
   app.user = null;
   app.state = null;
   closeAllDialogs();
@@ -189,6 +199,7 @@ function showApp(user, state) {
   $('#userName').textContent = user.username;
   $('#topDate').textContent = relativeDateLabel(state.today);
   renderAll();
+  restoreSavedFocusSession();
 }
 
 function switchAuthMode(mode) {
@@ -221,6 +232,455 @@ function renderAll() {
   $('#topDate').textContent = relativeDateLabel(app.state.today);
   renderTabs();
   renderView();
+}
+
+const FOCUS_STORAGE_PREFIX = 'light-todo-focus-v1:';
+
+function focusStorageKey() {
+  return app.user ? `${FOCUS_STORAGE_PREFIX}${app.user.id}` : '';
+}
+
+function clearFocusStorage() {
+  const key = focusStorageKey();
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch {}
+}
+
+function saveFocusSession() {
+  if (!app.focusSession || !app.user || app.focusSession.setup) return;
+  try {
+    localStorage.setItem(focusStorageKey(), JSON.stringify({
+      userId: app.user.id,
+      ...app.focusSession
+    }));
+  } catch {}
+}
+
+function stopFocusTicker() {
+  if (app.focusTicker) {
+    clearInterval(app.focusTicker);
+    app.focusTicker = null;
+  }
+}
+
+function showFocusSetup(task) {
+  if (!task || task.status !== 'open') return;
+  stopFocusTicker();
+  app.focusSession = {
+    taskId: task.id,
+    title: task.title,
+    totalMs: 25 * 60 * 1000,
+    remainingMs: 25 * 60 * 1000,
+    endAt: null,
+    running: false,
+    finished: false,
+    mode: 'flip',
+    showHours: false,
+    setup: true
+  };
+  $('#focusSetupTaskTitle').textContent = task.title;
+  $('#focusHours').value = '0';
+  $('#focusMinutes').value = '25';
+  $('#focusSeconds').value = '0';
+  $('#focusSetupError').textContent = '';
+  $$('input[name="focusMode"]').forEach((input) => {
+    input.checked = input.value === 'flip';
+  });
+  setFocusPresetSelection(25);
+  showFocusPage('setup');
+}
+
+function setFocusPresetSelection(minutes) {
+  $$('#focusPresets button').forEach((button) => {
+    button.classList.toggle('active', Number(button.dataset.focusMinutes) === minutes);
+  });
+}
+
+function setFocusDurationFromMinutes(minutes) {
+  $('#focusHours').value = String(Math.floor(minutes / 60));
+  $('#focusMinutes').value = String(minutes % 60);
+  $('#focusSeconds').value = '0';
+  setFocusPresetSelection(minutes);
+  $('#focusSetupError').textContent = '';
+}
+
+function readFocusDurationMs() {
+  const hours = Math.max(0, Math.min(23, Number.parseInt($('#focusHours').value || '0', 10) || 0));
+  const minutes = Math.max(0, Math.min(59, Number.parseInt($('#focusMinutes').value || '0', 10) || 0));
+  const seconds = Math.max(0, Math.min(59, Number.parseInt($('#focusSeconds').value || '0', 10) || 0));
+  return (hours * 3600 + minutes * 60 + seconds) * 1000;
+}
+
+function setFocusDurationInputs(totalMs) {
+  const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
+  $('#focusHours').value = String(Math.floor(totalSeconds / 3600));
+  $('#focusMinutes').value = String(Math.floor(totalSeconds % 3600 / 60));
+  $('#focusSeconds').value = String(totalSeconds % 60);
+}
+
+function showFocusPage(page) {
+  app.focusPage = page;
+  $('#appShell').classList.add('hidden');
+  $('#focusShell').classList.remove('hidden');
+  $('#focusSetupPage').classList.toggle('hidden', page !== 'setup');
+  $('#focusClockPage').classList.toggle('hidden', page !== 'clock');
+  $('#focusShell').classList.toggle('clock-mode', page === 'clock');
+  document.body.classList.add('focus-mode');
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}
+
+function hideFocusPage() {
+  stopFocusTicker();
+  app.focusSession = null;
+  app.focusPage = 'setup';
+  clearFocusStorage();
+  $('#focusShell').classList.add('hidden');
+  $('#focusShell').classList.remove('clock-mode');
+  $('#appShell').classList.remove('hidden');
+  document.body.classList.remove('focus-mode');
+  document.title = '轻待办';
+  if (app.state) renderAll();
+}
+
+function startFocusCountdown() {
+  const totalMs = readFocusDurationMs();
+  if (totalMs <= 0) {
+    $('#focusSetupError').textContent = '请设置一个大于 0 秒的专注时间。';
+    return;
+  }
+  const mode = $('input[name="focusMode"]:checked')?.value === 'analog' ? 'analog' : 'flip';
+  const task = app.state.openTasks.find((item) => item.id === app.focusSession?.taskId);
+  if (!task) {
+    toast('这个事项已经不存在或已完成。', 'error');
+    hideFocusPage();
+    return;
+  }
+  app.focusSession = {
+    taskId: task.id,
+    title: task.title,
+    totalMs,
+    remainingMs: totalMs,
+    endAt: Date.now() + totalMs,
+    running: true,
+    finished: false,
+    mode,
+    showHours: totalMs >= 3600000,
+    setup: false
+  };
+  app.focusPersistSecond = Math.ceil(totalMs / 1000);
+  showFocusClock();
+  saveFocusSession();
+}
+
+function showFocusClock() {
+  if (!app.focusSession) return;
+  $('#focusClockTask').textContent = app.focusSession.title;
+  $('#focusClockPage').classList.toggle('finished', app.focusSession.finished);
+  $('#focusFinishedActions').classList.toggle('hidden', !app.focusSession.finished);
+  showFocusPage('clock');
+  renderFocusClock();
+  startFocusTicker();
+}
+
+function startFocusTicker() {
+  stopFocusTicker();
+  if (!app.focusSession) return;
+  if (app.focusSession.running) {
+    updateFocusRemaining();
+    app.focusTicker = setInterval(updateFocusRemaining, 250);
+  }
+}
+
+function updateFocusRemaining() {
+  const session = app.focusSession;
+  if (!session) return;
+  if (session.running && session.endAt) {
+    session.remainingMs = Math.max(0, session.endAt - Date.now());
+    if (session.remainingMs <= 0) {
+      session.remainingMs = 0;
+      session.running = false;
+      session.finished = true;
+      session.endAt = null;
+      session.setup = false;
+      stopFocusTicker();
+      saveFocusSession();
+    } else {
+      const displaySecond = Math.ceil(session.remainingMs / 1000);
+      if (app.focusPersistSecond !== displaySecond) {
+        app.focusPersistSecond = displaySecond;
+        saveFocusSession();
+      }
+    }
+  }
+  renderFocusClock();
+}
+
+function focusTimeParts(session) {
+  const totalSeconds = Math.max(0, Math.ceil(session.remainingMs / 1000));
+  if (session.showHours) {
+    return {
+      units: [
+        String(Math.floor(totalSeconds / 3600)).padStart(2, '0'),
+        String(Math.floor(totalSeconds % 3600 / 60)).padStart(2, '0'),
+        String(totalSeconds % 60).padStart(2, '0')
+      ],
+      text: [
+        String(Math.floor(totalSeconds / 3600)).padStart(2, '0'),
+        String(Math.floor(totalSeconds % 3600 / 60)).padStart(2, '0'),
+        String(totalSeconds % 60).padStart(2, '0')
+      ].join(':')
+    };
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return {
+    units: [String(minutes).padStart(2, '0'), String(seconds).padStart(2, '0')],
+    text: `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  };
+}
+
+function buildFlipClock(unitCount) {
+  const root = $('#focusFlipClock');
+  if (Number(root.dataset.unitCount) === unitCount) return;
+  root.dataset.unitCount = String(unitCount);
+  root.classList.toggle('units-2', unitCount === 2);
+  root.classList.toggle('units-3', unitCount === 3);
+  root.innerHTML = Array.from({ length: unitCount }, (_, index) => {
+    const colon = index > 0 ? '<span class="flip-colon" aria-hidden="true"><span></span><span></span></span>' : '';
+    return `${colon}
+      <div class="flip-unit" data-flip-unit="${index}" data-value="00">
+        <div class="flip-half top"><span class="flip-digit" data-flip-face="top-static">00</span></div>
+        <div class="flip-half bottom"><span class="flip-digit" data-flip-face="bottom-static">00</span></div>
+        <div class="flip-half top flip-flap"><span class="flip-digit" data-flip-face="top-flap">00</span></div>
+        <div class="flip-half bottom flip-flap"><span class="flip-digit" data-flip-face="bottom-flap">00</span></div>
+      </div>`;
+  }).join('');
+}
+
+function setFlipUnit(unit, value, animate = true) {
+  const oldValue = unit.dataset.value || value;
+  const topStatic = $('[data-flip-face="top-static"]', unit);
+  const bottomStatic = $('[data-flip-face="bottom-static"]', unit);
+  const topFlap = $('[data-flip-face="top-flap"]', unit);
+  const bottomFlap = $('[data-flip-face="bottom-flap"]', unit);
+  if (!topStatic || !bottomStatic || !topFlap || !bottomFlap) return;
+
+  if (oldValue === value) {
+    if (!animate) {
+      topStatic.textContent = value;
+      bottomStatic.textContent = value;
+      topFlap.textContent = value;
+      bottomFlap.textContent = value;
+    }
+    unit.dataset.value = value;
+    return;
+  }
+
+  if (unit.flipTimer) clearTimeout(unit.flipTimer);
+  unit.classList.remove('flipping');
+  topStatic.textContent = value;
+  bottomStatic.textContent = oldValue;
+  topFlap.textContent = oldValue;
+  bottomFlap.textContent = value;
+  unit.dataset.value = value;
+
+  if (animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    void unit.offsetWidth;
+    unit.classList.add('flipping');
+    unit.flipTimer = setTimeout(() => {
+      bottomStatic.textContent = value;
+      unit.classList.remove('flipping');
+      unit.flipTimer = null;
+    }, 610);
+  } else {
+    bottomStatic.textContent = value;
+  }
+}
+
+function buildAnalogClock() {
+  const ticks = $('#analogClockTicks');
+  if (ticks.childElementCount) return;
+  for (let index = 0; index < 60; index += 1) {
+    const angle = index * 6 * Math.PI / 180;
+    const major = index % 5 === 0;
+    const outerRadius = 209;
+    const innerRadius = major ? 190 : 199;
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', (250 + Math.sin(angle) * innerRadius).toFixed(2));
+    line.setAttribute('y1', (250 - Math.cos(angle) * innerRadius).toFixed(2));
+    line.setAttribute('x2', (250 + Math.sin(angle) * outerRadius).toFixed(2));
+    line.setAttribute('y2', (250 - Math.cos(angle) * outerRadius).toFixed(2));
+    if (major) line.setAttribute('class', 'major');
+    ticks.append(line);
+  }
+}
+
+function renderFocusClock() {
+  const session = app.focusSession;
+  if (!session) return;
+  const parts = focusTimeParts(session);
+  const mode = session.mode || 'flip';
+  const flipRoot = $('#focusFlipClock');
+  const analogRoot = $('#focusAnalogClock');
+  flipRoot.classList.toggle('hidden', mode !== 'flip');
+  analogRoot.classList.toggle('hidden', mode !== 'analog');
+  const timerLabel = `${session.title}，剩余 ${parts.text}`;
+  flipRoot.setAttribute('aria-label', timerLabel);
+  analogRoot.setAttribute('aria-label', timerLabel);
+
+  if (mode === 'flip') {
+    buildFlipClock(parts.units.length);
+    $$('.flip-unit', flipRoot).forEach((unit, index) => {
+      setFlipUnit(unit, parts.units[index], unit.dataset.value !== '00' || session.remainingMs < session.totalMs);
+    });
+  } else {
+    buildAnalogClock();
+    const progress = session.totalMs > 0 ? session.remainingMs / session.totalMs : 0;
+    const circumference = 1262.92;
+    $('#analogProgressRing').style.strokeDashoffset = String(circumference * (1 - progress));
+    $('#analogCountdownHand').style.transform = `rotate(${(1 - progress) * 360}deg)`;
+    $('#analogDigitalTime').textContent = parts.text;
+  }
+
+  $('#focusClockPage').classList.toggle('finished', session.finished);
+  $('#focusFinishedActions').classList.toggle('hidden', !session.finished);
+  $('#focusPauseButton').disabled = session.finished;
+  const pauseLabel = $('span', $('#focusPauseButton'));
+  const pauseIcon = $('svg use', $('#focusPauseButton'));
+  pauseLabel.textContent = session.finished ? '已结束' : session.running ? '暂停' : '继续';
+  pauseIcon?.setAttribute('href', session.running ? '#i-pause' : '#i-play');
+  $('#focusModeButton span').textContent = mode === 'flip' ? '切换圆形钟' : '切换翻页钟';
+  $('#focusModeButton use')?.setAttribute('href', mode === 'flip' ? '#i-timer' : '#i-grid-clock');
+  $('#focusClockStatus').textContent = session.finished
+    ? '时间到了。今天就到这里，辛苦了。'
+    : session.running
+      ? '保持呼吸，专注于这一件事。'
+      : '计时已暂停，可以随时继续。';
+  document.title = session.finished ? '时间到了 · 轻待办' : `${parts.text} · 专注中`;
+}
+
+function toggleFocusPause() {
+  const session = app.focusSession;
+  if (!session || session.finished) return;
+  if (session.running) {
+    session.remainingMs = Math.max(0, session.endAt - Date.now());
+    session.running = false;
+    session.endAt = null;
+    stopFocusTicker();
+  } else {
+    if (session.remainingMs <= 0) return;
+    session.running = true;
+    session.endAt = Date.now() + session.remainingMs;
+    startFocusTicker();
+  }
+  saveFocusSession();
+  renderFocusClock();
+}
+
+function toggleFocusMode() {
+  const session = app.focusSession;
+  if (!session) return;
+  session.mode = session.mode === 'flip' ? 'analog' : 'flip';
+  saveFocusSession();
+  renderFocusClock();
+}
+
+function restartFocusSetup() {
+  const session = app.focusSession;
+  if (!session) return;
+  stopFocusTicker();
+  const task = app.state.openTasks.find((item) => item.id === session.taskId);
+  if (!task) {
+    hideFocusPage();
+    return;
+  }
+  $('#focusSetupTaskTitle').textContent = task.title;
+  setFocusDurationInputs(session.totalMs);
+  setFocusPresetSelection(null);
+  $$('input[name="focusMode"]').forEach((input) => {
+    input.checked = input.value === session.mode;
+  });
+  app.focusSession = {
+    ...session,
+    remainingMs: session.totalMs,
+    running: false,
+    finished: false,
+    endAt: null,
+    setup: true
+  };
+  clearFocusStorage();
+  showFocusPage('setup');
+}
+
+function requestExitFocus() {
+  if (!app.focusSession) {
+    hideFocusPage();
+    return;
+  }
+  if (app.focusSession.running) {
+    openConfirm({
+      eyebrow: '专注中',
+      title: '结束这次专注？',
+      description: '当前倒计时会停止，但不会改变这件待办事项的状态。',
+      label: '结束专注',
+      action: async () => hideFocusPage()
+    });
+  } else {
+    hideFocusPage();
+  }
+}
+
+async function completeTaskFromFocus() {
+  const session = app.focusSession;
+  if (!session) return;
+  const button = $('#focusCompleteTaskButton');
+  setBusy(button, true, '正在完成…');
+  try {
+    const result = await api(`/api/tasks/${encodeURIComponent(session.taskId)}/complete`, { method: 'POST' });
+    setState(result.state);
+    hideFocusPage();
+    toast('完成一件，辛苦了。');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function restoreSavedFocusSession() {
+  if (!app.user || !app.state) return;
+  try {
+    const raw = localStorage.getItem(focusStorageKey());
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    const task = app.state.openTasks.find((item) => item.id === saved.taskId);
+    if (!task) {
+      clearFocusStorage();
+      return;
+    }
+    const now = Date.now();
+    const remaining = saved.running && saved.endAt
+      ? Math.max(0, saved.endAt - now)
+      : Math.max(0, Number(saved.remainingMs) || 0);
+    app.focusSession = {
+      ...saved,
+      title: task.title,
+      remainingMs: remaining,
+      running: Boolean(saved.running && remaining > 0),
+      finished: remaining <= 0,
+      endAt: saved.running && remaining > 0 ? saved.endAt : null,
+      setup: false
+    };
+    if (app.focusSession.finished) {
+      app.focusSession.running = false;
+      app.focusSession.endAt = null;
+    }
+    showFocusClock();
+  } catch {
+    clearFocusStorage();
+  }
 }
 
 function renderTabs() {
@@ -283,6 +743,7 @@ function taskRow(task, options = {}) {
         </div>
       </div>
       <div class="task-actions">
+        ${completed ? '' : `<button class="focus-task-button" data-focus-task="${escapeHtml(task.id)}" type="button" title="现在做">${icon('timer')}<span>现在做</span></button>`}
         ${completed && canRestore ? `<button class="restore-button" data-restore-task="${escapeHtml(task.id)}" type="button" title="恢复为未完成">${icon('restore')}</button>` : ''}
         <button class="task-menu-button" data-task-menu="${escapeHtml(task.id)}" type="button" title="更多操作" aria-label="更多操作">${icon('more')}</button>
       </div>
@@ -1878,6 +2339,8 @@ async function finishTabPress() {
 }
 
 async function logout() {
+  stopFocusTicker();
+  clearFocusStorage();
   try {
     await api('/api/auth/logout', { method: 'POST' });
   } finally {
@@ -1964,6 +2427,13 @@ function bindEvents() {
   });
 
   $('#taskContent').addEventListener('click', (event) => {
+    const focusButton = event.target.closest('[data-focus-task]');
+    if (focusButton) {
+      event.stopPropagation();
+      const task = app.state.openTasks.find((item) => item.id === focusButton.dataset.focusTask);
+      if (task) showFocusSetup(task);
+      return;
+    }
     const menuButton = event.target.closest('[data-task-menu]');
     if (menuButton) {
       event.stopPropagation();
@@ -2018,6 +2488,26 @@ function bindEvents() {
   $('#listForm').addEventListener('submit', submitList);
   $('#deleteListForm').addEventListener('submit', submitDeleteList);
   $('#confirmForm').addEventListener('submit', submitConfirm);
+
+  $('#focusPresets').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-focus-minutes]');
+    if (!button) return;
+    setFocusDurationFromMinutes(Number(button.dataset.focusMinutes));
+  });
+  ['focusHours', 'focusMinutes', 'focusSeconds'].forEach((id) => {
+    $(`#${id}`).addEventListener('input', () => {
+      setFocusPresetSelection(null);
+      $('#focusSetupError').textContent = '';
+    });
+  });
+  $('#focusStartButton').addEventListener('click', startFocusCountdown);
+  $('#focusPauseButton').addEventListener('click', toggleFocusPause);
+  $('#focusModeButton').addEventListener('click', toggleFocusMode);
+  $('#focusRestartButton').addEventListener('click', restartFocusSetup);
+  $('#focusBackButton').addEventListener('click', requestExitFocus);
+  $('#focusExitButton').addEventListener('click', requestExitFocus);
+  $('#focusFinishedBackButton').addEventListener('click', () => hideFocusPage());
+  $('#focusCompleteTaskButton').addEventListener('click', completeTaskFromFocus);
 
   $('#colorOptions').addEventListener('click', (event) => {
     const button = event.target.closest('[data-color]');

@@ -22,6 +22,12 @@
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3c.5 4.8 2.2 6.5 7 7-4.8.5-6.5 2.2-7 7-.5-4.8-2.2-6.5-7-7 4.8-.5 6.5-2.2 7-7Z"/></symbol>
     <symbol id="i-restore" viewBox="0 0 24 24"><path d="M4 10a8 8 0 1 1 2 6m-2-6V4m0 6h6"/></symbol>
     <symbol id="i-grip" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m9 6 9 6-9 6V6Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m5-5-5 5 5 5"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 4v6h6M4.7 15a8 8 0 1 0 .7-7.1L4 10"/></symbol>
+    <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M9 2h6M12 5v3m0 5 3 2"/></symbol>
+    <symbol id="i-grid-clock" viewBox="0 0 24 24"><rect x="3" y="4" width="8" height="7" rx="2"/><rect x="13" y="4" width="8" height="7" rx="2"/><rect x="3" y="13" width="8" height="7" rx="2"/><rect x="13" y="13" width="8" height="7" rx="2"/></symbol>
   </svg>
 
   <section class="auth-screen" id="authScreen">
@@ -167,6 +173,134 @@
       <p class="drag-tip"><span></span> 按住 0.1 秒可拖动事项；拖到下方分表可移动</p>
     </main>
   </div>
+
+  <section class="focus-shell hidden" id="focusShell">
+    <header class="focus-topbar">
+      <button class="focus-back" id="focusBackButton" type="button">
+        <svg><use href="#i-back"></use></svg>
+        <span>返回待办</span>
+      </button>
+      <div class="focus-brand">
+        <span class="focus-brand-dot"></span>
+        <span>专注时刻</span>
+      </div>
+      <button class="focus-exit" id="focusExitButton" type="button">结束</button>
+    </header>
+
+    <section class="focus-setup-page" id="focusSetupPage">
+      <div class="focus-setup-atmosphere" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="focus-setup-content">
+        <p class="eyebrow">FOCUS · 现在做</p>
+        <h1>把这一刻，<br>留给它。</h1>
+        <p class="focus-task-title" id="focusSetupTaskTitle"></p>
+
+        <div class="focus-duration-block">
+          <div class="focus-block-heading">
+            <span>选择专注时间</span>
+            <small>到时间后会提醒你</small>
+          </div>
+          <div class="focus-presets" id="focusPresets">
+            <button type="button" data-focus-minutes="5">5 分钟</button>
+            <button type="button" data-focus-minutes="15">15 分钟</button>
+            <button type="button" class="active" data-focus-minutes="25">25 分钟</button>
+            <button type="button" data-focus-minutes="45">45 分钟</button>
+            <button type="button" data-focus-minutes="60">60 分钟</button>
+          </div>
+          <div class="focus-custom-time">
+            <label><input id="focusHours" type="number" min="0" max="23" inputmode="numeric"><span>时</span></label>
+            <i>:</i>
+            <label><input id="focusMinutes" type="number" min="0" max="59" inputmode="numeric"><span>分</span></label>
+            <i>:</i>
+            <label><input id="focusSeconds" type="number" min="0" max="59" inputmode="numeric"><span>秒</span></label>
+          </div>
+        </div>
+
+        <div class="focus-options-row">
+          <div class="focus-option-group">
+            <span>钟面</span>
+            <div class="focus-mode-options">
+              <label>
+                <input type="radio" name="focusMode" value="flip" checked>
+                <svg><use href="#i-grid-clock"></use></svg>
+                <span>翻页钟</span>
+              </label>
+              <label>
+                <input type="radio" name="focusMode" value="analog">
+                <svg><use href="#i-timer"></use></svg>
+                <span>圆形钟</span>
+              </label>
+            </div>
+          </div>
+          <button class="focus-start-button" id="focusStartButton" type="button">
+            <svg><use href="#i-play"></use></svg>
+            <span>开始倒计时</span>
+          </button>
+        </div>
+        <p class="focus-form-error" id="focusSetupError" role="alert"></p>
+      </div>
+    </section>
+
+    <section class="focus-clock-page hidden" id="focusClockPage">
+      <div class="focus-clock-meta">
+        <p class="eyebrow">NOW · 正在专注</p>
+        <h2 id="focusClockTask"></h2>
+      </div>
+
+      <div class="focus-clock-stage" id="focusClockStage">
+        <div class="flip-clock" id="focusFlipClock" role="timer" aria-live="off"></div>
+        <div class="analog-clock hidden" id="focusAnalogClock" role="timer" aria-live="off">
+          <svg class="analog-clock-svg" viewBox="0 0 500 500" aria-hidden="true">
+            <defs>
+              <radialGradient id="clockFaceGradient" cx="35%" cy="28%" r="78%">
+                <stop offset="0" stop-color="#fffdf8"></stop>
+                <stop offset=".78" stop-color="#f1eadc"></stop>
+                <stop offset="1" stop-color="#e5dccb"></stop>
+              </radialGradient>
+            </defs>
+            <circle class="analog-clock-rim" cx="250" cy="250" r="239"></circle>
+            <circle class="analog-clock-face" cx="250" cy="250" r="219"></circle>
+            <g class="analog-clock-ticks" id="analogClockTicks"></g>
+            <g class="analog-clock-numbers">
+              <text x="250" y="72">12</text>
+              <text x="432" y="263">3</text>
+              <text x="250" y="451">6</text>
+              <text x="68" y="263">9</text>
+            </g>
+            <circle class="analog-progress-track" cx="250" cy="250" r="201"></circle>
+            <circle class="analog-progress-ring" id="analogProgressRing" cx="250" cy="250" r="201"></circle>
+            <g class="analog-countdown-hand" id="analogCountdownHand">
+              <line x1="250" y1="272" x2="250" y2="104"></line>
+              <circle cx="250" cy="250" r="13"></circle>
+            </g>
+            <text class="analog-digital" id="analogDigitalTime" x="250" y="286">25:00</text>
+            <text class="analog-caption" x="250" y="316">REMAINING</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="focus-clock-status" id="focusClockStatus">保持呼吸，专注于这一件事。</div>
+      <div class="focus-clock-controls">
+        <button type="button" id="focusPauseButton">
+          <svg><use href="#i-pause"></use></svg>
+          <span>暂停</span>
+        </button>
+        <button type="button" id="focusModeButton">
+          <svg><use href="#i-grid-clock"></use></svg>
+          <span>切换表盘</span>
+        </button>
+        <button type="button" id="focusRestartButton">
+          <svg><use href="#i-reset"></use></svg>
+          <span>重新计时</span>
+        </button>
+      </div>
+      <div class="focus-finished-actions hidden" id="focusFinishedActions">
+        <button type="button" class="primary-button" id="focusCompleteTaskButton">完成这件事</button>
+        <button type="button" class="secondary-button" id="focusFinishedBackButton">回到待办</button>
+      </div>
+    </section>
+  </section>
 
   <dialog class="modal" id="taskDialog">
     <form method="dialog" class="modal-card compact" id="taskForm">
