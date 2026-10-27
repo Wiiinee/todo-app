@@ -277,11 +277,9 @@ function showFocusSetup(task) {
     running: false,
     finished: false,
     mode: 'flip',
-    showHours: false,
     setup: true
   };
   $('#focusSetupTaskTitle').textContent = task.title;
-  $('#focusHours').value = '0';
   $('#focusMinutes').value = '25';
   $('#focusSeconds').value = '0';
   $('#focusSetupError').textContent = '';
@@ -299,24 +297,21 @@ function setFocusPresetSelection(minutes) {
 }
 
 function setFocusDurationFromMinutes(minutes) {
-  $('#focusHours').value = String(Math.floor(minutes / 60));
-  $('#focusMinutes').value = String(minutes % 60);
+  $('#focusMinutes').value = String(Math.min(99, minutes));
   $('#focusSeconds').value = '0';
   setFocusPresetSelection(minutes);
   $('#focusSetupError').textContent = '';
 }
 
 function readFocusDurationMs() {
-  const hours = Math.max(0, Math.min(23, Number.parseInt($('#focusHours').value || '0', 10) || 0));
-  const minutes = Math.max(0, Math.min(59, Number.parseInt($('#focusMinutes').value || '0', 10) || 0));
+  const minutes = Math.max(0, Math.min(99, Number.parseInt($('#focusMinutes').value || '0', 10) || 0));
   const seconds = Math.max(0, Math.min(59, Number.parseInt($('#focusSeconds').value || '0', 10) || 0));
-  return (hours * 3600 + minutes * 60 + seconds) * 1000;
+  return (minutes * 60 + seconds) * 1000;
 }
 
 function setFocusDurationInputs(totalMs) {
-  const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
-  $('#focusHours').value = String(Math.floor(totalSeconds / 3600));
-  $('#focusMinutes').value = String(Math.floor(totalSeconds % 3600 / 60));
+  const totalSeconds = Math.min(99 * 60 + 59, Math.max(0, Math.floor(totalMs / 1000)));
+  $('#focusMinutes').value = String(Math.floor(totalSeconds / 60));
   $('#focusSeconds').value = String(totalSeconds % 60);
 }
 
@@ -366,7 +361,6 @@ function startFocusCountdown() {
     running: true,
     finished: false,
     mode,
-    showHours: totalMs >= 3600000,
     setup: false
   };
   app.focusPersistSecond = Math.ceil(totalMs / 1000);
@@ -389,7 +383,7 @@ function startFocusTicker() {
   if (!app.focusSession) return;
   if (app.focusSession.running) {
     updateFocusRemaining();
-    app.focusTicker = setInterval(updateFocusRemaining, 250);
+    app.focusTicker = setInterval(updateFocusRemaining, 100);
   }
 }
 
@@ -418,26 +412,14 @@ function updateFocusRemaining() {
 }
 
 function focusTimeParts(session) {
-  const totalSeconds = Math.max(0, Math.ceil(session.remainingMs / 1000));
-  if (session.showHours) {
-    return {
-      units: [
-        String(Math.floor(totalSeconds / 3600)).padStart(2, '0'),
-        String(Math.floor(totalSeconds % 3600 / 60)).padStart(2, '0'),
-        String(totalSeconds % 60).padStart(2, '0')
-      ],
-      text: [
-        String(Math.floor(totalSeconds / 3600)).padStart(2, '0'),
-        String(Math.floor(totalSeconds % 3600 / 60)).padStart(2, '0'),
-        String(totalSeconds % 60).padStart(2, '0')
-      ].join(':')
-    };
-  }
+  const totalSeconds = Math.max(0, Math.min(99 * 60 + 59, Math.ceil(session.remainingMs / 1000)));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
+  const minuteText = String(minutes).padStart(2, '0');
+  const secondText = String(seconds).padStart(2, '0');
   return {
-    units: [String(minutes).padStart(2, '0'), String(seconds).padStart(2, '0')],
-    text: `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    units: [...minuteText, ...secondText],
+    text: `${minuteText}:${secondText}`
   };
 }
 
@@ -445,10 +427,9 @@ function buildFlipClock(unitCount) {
   const root = $('#focusFlipClock');
   if (Number(root.dataset.unitCount) === unitCount) return;
   root.dataset.unitCount = String(unitCount);
-  root.classList.toggle('units-2', unitCount === 2);
-  root.classList.toggle('units-3', unitCount === 3);
+  root.classList.toggle('units-4', unitCount === 4);
   root.innerHTML = Array.from({ length: unitCount }, (_, index) => {
-    const colon = index > 0 ? '<span class="flip-colon" aria-hidden="true"><span></span><span></span></span>' : '';
+    const colon = index === 2 ? '<span class="flip-colon" aria-hidden="true"><span></span><span></span></span>' : '';
     return `${colon}
       <div class="flip-unit" data-flip-unit="${index}" data-value="00">
         <div class="flip-half top"><span class="flip-digit" data-flip-face="top-static">00</span></div>
@@ -538,10 +519,7 @@ function renderFocusClock() {
   } else {
     buildAnalogClock();
     const progress = session.totalMs > 0 ? session.remainingMs / session.totalMs : 0;
-    const circumference = 1262.92;
-    $('#analogProgressRing').style.strokeDashoffset = String(circumference * (1 - progress));
-    $('#analogCountdownHand').style.transform = `rotate(${(1 - progress) * 360}deg)`;
-    $('#analogDigitalTime').textContent = parts.text;
+    $('#analogCountdownHand').style.transform = `rotate(${-(1 - progress) * 360}deg)`;
   }
 
   $('#focusClockPage').classList.toggle('finished', session.finished);
@@ -667,12 +645,14 @@ function restoreSavedFocusSession() {
     app.focusSession = {
       ...saved,
       title: task.title,
+      totalMs: Math.min(99 * 60 * 1000 + 59000, Math.max(1000, Number(saved.totalMs) || 1500000)),
       remainingMs: remaining,
       running: Boolean(saved.running && remaining > 0),
       finished: remaining <= 0,
       endAt: saved.running && remaining > 0 ? saved.endAt : null,
       setup: false
     };
+    app.focusSession.remainingMs = Math.min(app.focusSession.remainingMs, app.focusSession.totalMs);
     if (app.focusSession.finished) {
       app.focusSession.running = false;
       app.focusSession.endAt = null;
@@ -2494,7 +2474,7 @@ function bindEvents() {
     if (!button) return;
     setFocusDurationFromMinutes(Number(button.dataset.focusMinutes));
   });
-  ['focusHours', 'focusMinutes', 'focusSeconds'].forEach((id) => {
+  ['focusMinutes', 'focusSeconds'].forEach((id) => {
     $(`#${id}`).addEventListener('input', () => {
       setFocusPresetSelection(null);
       $('#focusSetupError').textContent = '';

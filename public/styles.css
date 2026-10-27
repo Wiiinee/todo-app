@@ -2234,7 +2234,7 @@ svg {
 }
 
 .flip-clock {
-  --flip-size: clamp(116px, min(24vw, 29vh), 280px);
+  --flip-size: clamp(102px, min(18.5vw, 25vh), 260px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2242,12 +2242,8 @@ svg {
   perspective: 1800px;
 }
 
-.flip-clock.units-2 {
-  --flip-size: clamp(142px, min(29vw, 34vh), 330px);
-}
-
-.flip-clock.units-3 {
-  --flip-size: clamp(112px, min(23vw, 28vh), 270px);
+.flip-clock.units-4 {
+  --flip-size: clamp(102px, min(18.5vw, 25vh), 260px);
 }
 
 .flip-unit {
@@ -2307,12 +2303,12 @@ svg {
   justify-content: center;
   color: #fffdf8;
   font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: calc(var(--flip-size) * .53);
+  font-size: calc(var(--flip-size) * .63);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  letter-spacing: -.105em;
+  font-weight: 650;
+  letter-spacing: 0;
   line-height: 1;
-  transform: translateX(-.045em);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .06);
 }
 
 .flip-half.bottom .flip-digit {
@@ -2404,33 +2400,25 @@ svg {
 .analog-clock-numbers text {
   fill: #2a332d;
   font-family: "Noto Serif SC", serif;
-  font-size: 28px;
+  font-size: 25px;
+  font-weight: 600;
+  paint-order: stroke fill;
+  stroke: rgba(247, 241, 231, .92);
+  stroke-width: 2.5px;
   text-anchor: middle;
   dominant-baseline: middle;
 }
 
-.analog-progress-track {
-  fill: none;
-  stroke: rgba(81, 78, 68, .12);
-  stroke-width: 5;
-}
-
-.analog-progress-ring {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 5;
-  stroke-linecap: round;
-  stroke-dasharray: 1262.92;
-  stroke-dashoffset: 0;
-  transform: rotate(-90deg);
-  transform-origin: 250px 250px;
-  transition: stroke-dashoffset .25s linear;
+.analog-clock-numbers .percent-label.start {
+  fill: rgba(42, 51, 45, .5);
+  font-size: 16px;
+  font-weight: 400;
 }
 
 .analog-countdown-hand {
   color: #a84f33;
   transform-origin: 250px 250px;
-  transition: transform .25s linear;
+  transition: transform .1s linear;
 }
 
 .analog-countdown-hand line {
@@ -2441,23 +2429,6 @@ svg {
 
 .analog-countdown-hand circle {
   fill: currentColor;
-}
-
-.analog-digital {
-  fill: #28332c;
-  font-family: var(--font-mono);
-  font-size: 32px;
-  font-weight: 600;
-  letter-spacing: -.06em;
-  text-anchor: middle;
-}
-
-.analog-caption {
-  fill: rgba(40, 51, 44, .46);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: .18em;
-  text-anchor: middle;
 }
 
 .focus-clock-status {

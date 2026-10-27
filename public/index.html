@@ -209,9 +209,7 @@
             <button type="button" data-focus-minutes="60">60 分钟</button>
           </div>
           <div class="focus-custom-time">
-            <label><input id="focusHours" type="number" min="0" max="23" inputmode="numeric"><span>时</span></label>
-            <i>:</i>
-            <label><input id="focusMinutes" type="number" min="0" max="59" inputmode="numeric"><span>分</span></label>
+            <label><input id="focusMinutes" type="number" min="0" max="99" inputmode="numeric"><span>分</span></label>
             <i>:</i>
             <label><input id="focusSeconds" type="number" min="0" max="59" inputmode="numeric"><span>秒</span></label>
           </div>
@@ -263,19 +261,16 @@
             <circle class="analog-clock-face" cx="250" cy="250" r="219"></circle>
             <g class="analog-clock-ticks" id="analogClockTicks"></g>
             <g class="analog-clock-numbers">
-              <text x="250" y="72">12</text>
-              <text x="432" y="263">3</text>
-              <text x="250" y="451">6</text>
-              <text x="68" y="263">9</text>
+              <text class="percent-label end" x="250" y="82">100%</text>
+              <text class="percent-label start" x="250" y="109">0%</text>
+              <text class="percent-label" x="410" y="262">25%</text>
+              <text class="percent-label" x="250" y="430">50%</text>
+              <text class="percent-label" x="90" y="262">75%</text>
             </g>
-            <circle class="analog-progress-track" cx="250" cy="250" r="201"></circle>
-            <circle class="analog-progress-ring" id="analogProgressRing" cx="250" cy="250" r="201"></circle>
             <g class="analog-countdown-hand" id="analogCountdownHand">
               <line x1="250" y1="272" x2="250" y2="104"></line>
               <circle cx="250" cy="250" r="13"></circle>
             </g>
-            <text class="analog-digital" id="analogDigitalTime" x="250" y="286">25:00</text>
-            <text class="analog-caption" x="250" y="316">REMAINING</text>
           </svg>
         </div>
       </div>
