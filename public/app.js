@@ -431,11 +431,11 @@ function buildFlipClock(unitCount) {
   root.innerHTML = Array.from({ length: unitCount }, (_, index) => {
     const colon = index === 2 ? '<span class="flip-colon" aria-hidden="true"><span></span><span></span></span>' : '';
     return `${colon}
-      <div class="flip-unit" data-flip-unit="${index}" data-value="00">
-        <div class="flip-half top"><span class="flip-digit" data-flip-face="top-static">00</span></div>
-        <div class="flip-half bottom"><span class="flip-digit" data-flip-face="bottom-static">00</span></div>
-        <div class="flip-half top flip-flap"><span class="flip-digit" data-flip-face="top-flap">00</span></div>
-        <div class="flip-half bottom flip-flap"><span class="flip-digit" data-flip-face="bottom-flap">00</span></div>
+      <div class="flip-unit" data-flip-unit="${index}" data-value="">
+        <div class="flip-half top"><span class="flip-digit" data-flip-face="top-static">0</span></div>
+        <div class="flip-half bottom"><span class="flip-digit" data-flip-face="bottom-static">0</span></div>
+        <div class="flip-half top flip-flap"><span class="flip-digit" data-flip-face="top-flap">0</span></div>
+        <div class="flip-half bottom flip-flap"><span class="flip-digit" data-flip-face="bottom-flap">0</span></div>
       </div>`;
   }).join('');
 }
@@ -471,7 +471,9 @@ function setFlipUnit(unit, value, animate = true) {
     void unit.offsetWidth;
     unit.classList.add('flipping');
     unit.flipTimer = setTimeout(() => {
+      topFlap.textContent = value;
       bottomStatic.textContent = value;
+      bottomFlap.textContent = value;
       unit.classList.remove('flipping');
       unit.flipTimer = null;
     }, 610);
@@ -512,13 +514,25 @@ function renderFocusClock() {
   analogRoot.setAttribute('aria-label', timerLabel);
 
   if (mode === 'flip') {
+    const freshClock = Number(flipRoot.dataset.unitCount) !== parts.units.length;
     buildFlipClock(parts.units.length);
     $$('.flip-unit', flipRoot).forEach((unit, index) => {
-      setFlipUnit(unit, parts.units[index], unit.dataset.value !== '00' || session.remainingMs < session.totalMs);
+      setFlipUnit(unit, parts.units[index], !freshClock && session.remainingMs < session.totalMs);
     });
   } else {
     buildAnalogClock();
     const progress = session.totalMs > 0 ? session.remainingMs / session.totalMs : 0;
+    const totalMinutes = session.totalMs / 60000;
+    const scaleLabel = (ratio) => {
+      const minutes = totalMinutes * ratio;
+      if (minutes <= 0) return '0分';
+      return `${Math.ceil(minutes)}分`;
+    };
+    $('#analogLabelStart').textContent = scaleLabel(1);
+    $('#analogLabel75').textContent = scaleLabel(.75);
+    $('#analogLabel50').textContent = scaleLabel(.5);
+    $('#analogLabel25').textContent = scaleLabel(.25);
+    $('#analogLabelEnd').textContent = '0分';
     $('#analogCountdownHand').style.transform = `rotate(${-(1 - progress) * 360}deg)`;
   }
 
